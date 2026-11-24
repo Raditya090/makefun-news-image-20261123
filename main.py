@@ -1,71 +1,69 @@
 #!/usr/bin/env python3
-"""THE FIRST LIGHT POST — entry program for news-image-20261123 (akun4).
+"""Carrier program for THE FIRST LIGHT POST (news-image-20261123, akun4).
 
-Concept: a light-grey broadsheet front page with black ink and a
-burnt-orange accent, summing up Monday 23 November 2026 in one image:
-12 numbered main cards led by the burning tankers in the Strait of
-Hormuz, a day-in-numbers box, a dotted world map, a red date-check box
-and 31 further briefs — 43 stories, 7 regions, all from the one day.
+The artwork is a single PNG front page — light-grey paper, black ink,
+burnt-orange accent — that compresses the whole of Monday 23 November
+2026 into one image: a dozen numbered cards headed by the Hormuz
+tankers, six day-defining numbers, a dotted map, a red date-check box
+and thirty-one briefs. 43 stories, 7 regions, one day.
 
-This program is deliberately boring: it is a stdlib-only, copy-only
-carrier. It reads the finished entry.png sitting next to it, verifies
-the byte count and the SHA-256 fingerprint, and writes the identical
-bytes to the output directory. No image work happens here — the
-picture was drawn beforehand by compose.py in the recorded session.
+Drawing happened earlier, in the recorded build session (compose.py).
+This file's only job at scoring time is delivery: copy entry.png from
+beside this script into the output folder, byte for byte, after
+checking the copy against the size and SHA-256 recorded below. It
+imports nothing outside the standard library and never touches the
+image's pixels, so two runs always produce the same file.
 """
 
 import hashlib
 import os
 import sys
 
-# Fingerprint of the shipped artwork (filled in once entry.png was final).
-EXPECTED_BYTES = 117026
-EXPECTED_SHA256 = "2b97bcaed6cb4173a2a8e9e2e55393ac89257b62f80a6ecf672c7fa164568908"
-
-PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-HARD_LIMIT = 1048576  # the competition's 1 MiB ceiling
+ARTWORK_BYTES = 117026
+ARTWORK_SHA256 = "2b97bcaed6cb4173a2a8e9e2e55393ac89257b62f80a6ecf672c7fa164568908"
+CEILING = 1048576  # 1 MiB, the gate's hard limit for this bounty
+SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
-def load_artwork(path):
-    # Read in one pass: the artwork is small (about 117 KB) and the run
-    # must be deterministic, so no chunking or streaming tricks here.
-    with open(path, "rb") as handle:
-        return handle.read()
+def read_artwork(folder):
+    path = os.path.join(folder, "entry.png")
+    with open(path, "rb") as stream:
+        return stream.read()
 
 
-def verify(data):
-    """Refuse to ship anything that is not exactly the final artwork."""
-    if not data:
-        raise SystemExit("entry.png is empty")
-    if data[:8] != PNG_SIGNATURE:
-        raise SystemExit("entry.png does not start with the PNG signature")
-    if len(data) > HARD_LIMIT:
-        raise SystemExit("entry.png exceeds 1 MiB: %d bytes" % len(data))
-    if len(data) != EXPECTED_BYTES:
-        raise SystemExit(
-            "entry.png size drifted: %d bytes, expected %d"
-            % (len(data), EXPECTED_BYTES)
+def check_artwork(blob):
+    if len(blob) == 0:
+        sys.exit("artwork missing: entry.png read as zero bytes")
+    if blob[:8] != SIGNATURE:
+        sys.exit("artwork is not a PNG: bad opening signature")
+    if len(blob) > CEILING:
+        sys.exit("artwork too large: %d bytes over the 1 MiB gate" % len(blob))
+    if len(blob) != ARTWORK_BYTES:
+        sys.exit(
+            "artwork size mismatch: got %d, recorded %d"
+            % (len(blob), ARTWORK_BYTES)
         )
-    digest = hashlib.sha256(data).hexdigest()
-    if digest != EXPECTED_SHA256:
-        raise SystemExit("entry.png sha256 drifted: %s" % digest)
-    return digest
+    if hashlib.sha256(blob).hexdigest() != ARTWORK_SHA256:
+        sys.exit("artwork fingerprint mismatch: sha256 differs from record")
+
+
+def deliver(blob, folder):
+    # The output folder may not exist yet on a fresh scoring machine.
+    os.makedirs(folder, exist_ok=True)
+    destination = os.path.join(folder, "entry.png")
+    with open(destination, "wb") as stream:
+        stream.write(blob)
 
 
 def main():
-    here = os.path.dirname(os.path.abspath(__file__))
-    source = os.path.join(here, "entry.png")
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
-    target = os.path.join(out_dir, "entry.png")
-
-    data = load_artwork(source)
-    digest = verify(data)
-
-    os.makedirs(out_dir, exist_ok=True)
-    with open(target, "wb") as handle:
-        handle.write(data)
-
-    sys.stderr.write("entry.png: %d bytes sha256=%s\n" % (len(data), digest))
+    folder = os.path.dirname(os.path.abspath(__file__))
+    blob = read_artwork(folder)
+    check_artwork(blob)
+    deliver(blob, os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output")
+    sys.stderr.write(
+        "delivered entry.png — %d bytes, sha256 %s\n"
+        % (len(blob), hashlib.sha256(blob).hexdigest())
+    )
 
 
 if __name__ == "__main__":
